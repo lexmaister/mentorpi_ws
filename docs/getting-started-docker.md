@@ -29,7 +29,7 @@ Clone this repository to any Linux path, for example:
 ```bash
 mkdir -p ~/projects
 cd ~/projects
-git clone <your-repo-url> mentorpi_ws
+git clone https://github.com/lexmaister/mentorpi_ws.git mentorpi_ws
 cd mentorpi_ws
 ```
 
