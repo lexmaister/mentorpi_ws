@@ -66,11 +66,36 @@ Cause:
 
 - camera does not support default `yuyv`
 
+Typical log:
+
+- `what(): Specified format 'yuyv' is unsupported by the selected device '/dev/video0'`
+- node prints only `Motion-JPEG ...` modes before terminating
+
 Fix:
 
-Edit `src/MentorPi/peripherals/config/usb_cam_param.yaml` and set:
+Open the config with Helix and set:
+
+```bash
+hx src/MentorPi/peripherals/config/usb_cam_param.yaml
+```
 
 - `pixel_format: mjpeg2rgb`
+
+Then restart webcam launch:
+
+```bash
+export DEPTH_CAMERA_TYPE=usb_cam
+ros2 launch peripherals usb_cam.launch.py
+```
+
+Optional pre-check to confirm supported formats:
+
+```bash
+apt update && apt install -y v4l-utils
+v4l2-ctl --device=/dev/video0 --list-formats-ext
+```
+
+If your output lists only MJPEG modes, keep `pixel_format: mjpeg2rgb`.
 
 ## 5. GUI apps (RViz/OpenCV) do not open
 

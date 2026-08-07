@@ -232,5 +232,18 @@ export need_compile=True
 
 If webcam format fails, adjust pixel format:
 
-- edit `src/MentorPi/peripherals/config/usb_cam_param.yaml`
+- `hx src/MentorPi/peripherals/config/usb_cam_param.yaml`
 - try `pixel_format: mjpeg2rgb`
+
+If you see this exact crash:
+
+- `what(): Specified format 'yuyv' is unsupported by the selected device '/dev/video0'`
+
+Use:
+
+```bash
+apt update && apt install -y v4l-utils
+v4l2-ctl --device=/dev/video0 --list-formats-ext
+# If only MJPEG modes appear, set pixel_format: mjpeg2rgb in usb_cam_param.yaml
+ros2 launch peripherals usb_cam.launch.py
+```

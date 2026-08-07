@@ -80,6 +80,25 @@ export DEPTH_CAMERA_TYPE=usb_cam
 ros2 launch peripherals usb_cam.launch.py
 ```
 
+If launch crashes with `Specified format 'yuyv' is unsupported` and logs show only `Motion-JPEG` modes:
+
+1. Open config in Helix:
+
+```bash
+hx src/MentorPi/peripherals/config/usb_cam_param.yaml
+```
+2. Set `pixel_format: mjpeg2rgb`
+3. Re-launch `ros2 launch peripherals usb_cam.launch.py`
+
+Optional format probe:
+
+```bash
+apt update && apt install -y v4l-utils
+v4l2-ctl --device=/dev/video0 --list-formats-ext
+```
+
+Note: when using this workspace layout, change the source file above (not files under `/ws/install/...`).
+
 ### 4.3 Verify stream
 
 ```bash

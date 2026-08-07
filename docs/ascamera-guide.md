@@ -59,6 +59,10 @@ And adds:
 
 If your device path differs, update `compose.yml` accordingly and recreate container.
 
+```bash
+hx compose.yml
+```
+
 ### 3.2 Optional fallback for hard device-permission setups
 
 If targeted mapping fails (common in some VM passthrough setups), temporary fallback:

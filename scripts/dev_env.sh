@@ -21,6 +21,14 @@ export MASTER="${MASTER:-/}"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-0}"
 
+# Prefer Helix as the default terminal editor when available.
+if command -v hx >/dev/null 2>&1; then
+  export EDITOR="${EDITOR:-hx}"
+  export VISUAL="${VISUAL:-hx}"
+  alias vi='hx'
+  alias vim='hx'
+fi
+
 # Optional .typerc values for compatibility (mounted from scripts/.typerc).
 # Keep current shell values if present.
 if [ -f /ws/.typerc ]; then
