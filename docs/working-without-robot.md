@@ -135,7 +135,7 @@ ros2 topic list | grep ascamera
 ros2 topic hz /ascamera/camera_publisher/rgb0/image
 ```
 
-and watch cam video:
+and watch cam video (in the second shell):
 
 ```bash
 ros2 run image_view image_view --ros-args -r image:=/ascamera/camera_publisher/rgb0/image
@@ -143,13 +143,22 @@ ros2 run image_view image_view --ros-args -r image:=/ascamera/camera_publisher/r
 
 ### 4.4 Run image-only examples
 
-Example node that can run with webcam input:
+Example node that can run with webcam input (in the second shell while camera node is running):
 
 ```bash
 ros2 run example hand_detect
 ```
 
-Some launch files in `example` include controller/motion dependencies. Prefer direct nodes for hardware-light testing.
+View the detection result image in the third shell:
+
+```bash
+ros2 run image_view image_view --ros-args -r image:=/hand_detect/image_result
+```
+
+You should see something like:
+
+![hand_detect](./img/hand_detect.png)
+
 
 ## 5. YOLO workflow without robot chassis
 

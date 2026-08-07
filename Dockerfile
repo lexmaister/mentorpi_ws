@@ -8,6 +8,7 @@ RUN apt update && apt install -y \
 
 RUN apt update && apt install -y \
     git \
+    python3-pip \
     python3-colcon-common-extensions \
     python3-rosdep \
     python3-vcstool \
@@ -21,6 +22,8 @@ RUN apt update && apt install -y \
     ros-humble-xacro \
     ros-humble-nav2-common \
     && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --no-cache-dir "numpy<2" "mediapipe==0.10.14"
 
 RUN rosdep init || true
 
