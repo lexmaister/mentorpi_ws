@@ -8,6 +8,7 @@ RUN apt update && apt install -y \
     python3-rosdep \
     python3-vcstool \
     build-essential \
+    ros-humble-usb-cam \
     ros-humble-joint-state-publisher \
     ros-humble-joint-state-publisher-gui \
     ros-humble-robot-state-publisher \
