@@ -1,0 +1,37 @@
+services:
+  mentorpi_dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mentorpi_dev
+    network_mode: host
+    ipc: host
+    tty: true
+    stdin_open: true
+    working_dir: /ws
+    environment:
+      ROS_DOMAIN_ID: 0
+      ROS_LOCALHOST_ONLY: 0
+      DISPLAY: ${DISPLAY}
+      QT_X11_NO_MITSHM: 1
+    volumes:
+      - ./src:/ws/src
+      - ./scripts:/ws/scripts:ro
+      - ./scripts/.typerc:/ws/.typerc:ro
+      - mentorpi_build:/ws/build
+      - mentorpi_install:/ws/install
+      - mentorpi_log:/ws/log
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
+    group_add:
+      - video
+    command: bash
+
+volumes:
+  mentorpi_build:
+  mentorpi_install:
+  mentorpi_log:
+
+  
