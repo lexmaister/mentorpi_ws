@@ -80,15 +80,42 @@ export DEPTH_CAMERA_TYPE=usb_cam
 ros2 launch peripherals usb_cam.launch.py
 ```
 
-If launch crashes with `Specified format 'yuyv' is unsupported` and logs show only `Motion-JPEG` modes:
+If launch crashes with `Specified format 'yuyv' is unsupported`, or if `usb_cam` starts but logs repeated `Failed to send AVPacket to decode` messages, avoid editing the vendored MentorPi config under `src/MentorPi/...`.
 
-1. Open config in Helix:
+Use a direct `usb_cam` command line with explicit parameters and MentorPi-compatible remaps instead:
 
 ```bash
-hx src/MentorPi/peripherals/config/usb_cam_param.yaml
+source /opt/ros/humble/setup.bash
+source /ws/install/setup.bash
+
+ros2 run usb_cam usb_cam_node_exe --ros-args \
+	-p video_device:=/dev/video0 \
+	-p image_width:=640 \
+	-p image_height:=480 \
+	-p framerate:=5.0 \
+	-p pixel_format:=mjpeg2rgb \
+	-p io_method:=mmap \
+	-p brightness:=-1 \
+	-p contrast:=-1 \
+	-p saturation:=-1 \
+	-p sharpness:=-1 \
+	-p gain:=-1 \
+	-p auto_white_balance:=true \
+	-p white_balance:=-1 \
+	-p autoexposure:=true \
+	-p exposure:=-1 \
+	-p autofocus:=false \
+	-p focus:=-1 \
+	-p camera_name:=usb_cam \
+	-p camera_info_url:=package://peripherals/config/camera_info.yaml \
+	-r image_raw:=/ascamera/camera_publisher/rgb0/image \
+	-r image_raw/compressed:=/ascamera/camera_publisher/rgb0/image_compressed \
+	-r image_raw/compressedDepth:=/ascamera/camera_publisher/rgb0/compressedDepth \
+	-r image_raw/theora:=/ascamera/camera_publisher/rgb0/image_raw/theora \
+	-r camera_info:=/ascamera/camera_publisher/rgb0/camera_info
 ```
-2. Set `pixel_format: mjpeg2rgb`
-3. Re-launch `ros2 launch peripherals usb_cam.launch.py`
+
+This keeps the external MentorPi repository untouched while giving you a webcam profile that is often more stable for MJPEG-only devices and VirtualBox passthrough cameras.
 
 Optional format probe:
 
@@ -97,13 +124,21 @@ apt update && apt install -y v4l-utils
 v4l2-ctl --device=/dev/video0 --list-formats-ext
 ```
 
-Note: when using this workspace layout, change the source file above (not files under `/ws/install/...`).
+If the webcam still decodes badly at `640x480`, try `image_width:=320 image_height:=240` first, then increase resolution after the viewer is stable.
 
 ### 4.3 Verify stream
+
+Keep `usb_cam` node running, then inspect the image stream in a second shell:
 
 ```bash
 ros2 topic list | grep ascamera
 ros2 topic hz /ascamera/camera_publisher/rgb0/image
+```
+
+and watch cam video:
+
+```bash
+ros2 run image_view image_view --ros-args -r image:=/ascamera/camera_publisher/rgb0/image
 ```
 
 ### 4.4 Run image-only examples

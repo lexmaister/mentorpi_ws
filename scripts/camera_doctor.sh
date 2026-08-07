@@ -11,7 +11,10 @@ if [ ! -d /ws ]; then
   exit 0
 fi
 
+# ROS setup scripts reference variables that may be unset; temporarily relax nounset.
+set +u
 source /ws/scripts/dev_env.sh
+set -u
 
 echo "== Camera doctor =="
 echo "need_compile=$need_compile DEPTH_CAMERA_TYPE=$DEPTH_CAMERA_TYPE"
