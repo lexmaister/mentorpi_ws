@@ -19,6 +19,7 @@ RUN apt update && apt install -y \
     ros-humble-joint-state-publisher-gui \
     ros-humble-robot-state-publisher \
     ros-humble-rviz2 \
+    ros-humble-plotjuggler-ros \
     ros-humble-xacro \
     ros-humble-nav2-common \
     && rm -rf /var/lib/apt/lists/*

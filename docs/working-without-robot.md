@@ -159,6 +159,51 @@ You should see something like:
 
 ![hand_detect](./img/hand_detect.png)
 
+Observe numerical hand-pose values (4th shell):
+
+```bash
+ros2 topic echo /hand_detect/center
+```
+
+Useful values from `/hand_detect/center` (`interfaces/msg/Point2D`):
+
+- `x`: hand center x pixel position
+- `y`: hand center y pixel position
+- `width`: image width in pixels
+- `height`: image height in pixels
+
+Quick interpretation for analysis:
+
+- horizontal offset: `x - width/2`
+- vertical offset: `y - height/2`
+- normalized x: `x/width`
+- normalized y: `y/height`
+
+`width` and `height` should stay nearly constant for a fixed camera mode. `x` and `y` should move smoothly as the hand moves.
+
+### 4.5 PlotJuggler data analysis
+
+Use PlotJuggler to visualize hand center trajectories over time:
+
+```bash
+ros2 run plotjuggler plotjuggler
+```
+
+In PlotJuggler:
+
+1. Open the ROS 2 streaming plugin/source.
+2. Subscribe to `/hand_detect/center`.
+3. Plot `x`, `y`, `width`, `height` as time series.
+4. Add custom curves for `x-width/2` and `y-height/2` to inspect control error around image center.
+
+If PlotJuggler command is missing, rebuild container image after Dockerfile update:
+
+```bash
+docker compose down
+docker compose build --no-cache mentorpi_dev
+docker compose up -d
+```
+
 
 ## 5. YOLO workflow without robot chassis
 
