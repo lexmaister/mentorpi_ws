@@ -43,7 +43,28 @@ What happens when you drive it with a joystick:
 This is the main control loop viewers should keep in mind: commands go down toward the base driver, while state and sensor observations flow up toward localization, planning, and visualization.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#1e293b',
+  'primaryTextColor': '#e2e8f0',
+  'primaryBorderColor': '#7dd3fc',
+  'lineColor': '#93c5fd',
+  'secondaryColor': '#0f172a',
+  'tertiaryColor': '#111827',
+  'background': '#020817',
+  'mainBkg': '#0f172a',
+  'nodeBorder': '#7dd3fc',
+  'clusterBkg': '#0f172a',
+  'clusterBorder': '#93c5fd',
+  'textColor': '#e2e8f0',
+  'fontFamily': 'Arial',
+  'fontSize': '14px'
+}}}%%
 flowchart LR
+  classDef robot fill:#1d4ed8,stroke:#7dd3fc,color:#e0f2fe,stroke-width:1.5px;
+  classDef data fill:#0f766e,stroke:#99f6e4,color:#ecfeff,stroke-width:1.5px;
+  classDef app fill:#7c3aed,stroke:#c4b5fd,color:#f5f3ff,stroke-width:1.5px;
+  classDef io fill:#1f2937,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
+
   subgraph Robot[MentorPi Runtime]
     S[Sensors and Drivers\nlidar, imu, encoders, camera, base controller]
     TF[TF and Robot State\n/tf, /odom, joint state, frame relationships]
@@ -72,6 +93,11 @@ flowchart LR
   NAV -. observe .-> RVIZ
   TF -. observe .-> PLOT
   CLI -. inspect topics, nodes, TF .-> Robot
+
+  class S,TF,SLAM,NAV,BASE robot;
+  class CMD,BEH app;
+  class RVIZ,PLOT,CLI io;
+  style Robot fill:#0b1220,stroke:#93c5fd,stroke-width:1.2px,color:#e2e8f0;
 ```
 
 ## Glossary
@@ -126,7 +152,30 @@ How to read this package map:
 You can think of the runtime graph as a stack: lower packages publish the facts, middle packages interpret them, and upper packages decide what to do with them.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#1e293b',
+  'primaryTextColor': '#e2e8f0',
+  'primaryBorderColor': '#7dd3fc',
+  'lineColor': '#93c5fd',
+  'secondaryColor': '#0f172a',
+  'tertiaryColor': '#111827',
+  'background': '#020817',
+  'mainBkg': '#0f172a',
+  'nodeBorder': '#7dd3fc',
+  'clusterBkg': '#0f172a',
+  'clusterBorder': '#93c5fd',
+  'textColor': '#e2e8f0',
+  'fontFamily': 'Arial',
+  'fontSize': '14px'
+}}}%%
 flowchart TB
+  classDef hw fill:#2563eb,stroke:#93c5fd,color:#eff6ff,stroke-width:1.5px;
+  classDef iface fill:#0f766e,stroke:#99f6e4,color:#ecfeff,stroke-width:1.5px;
+  classDef start fill:#7c3aed,stroke:#c4b5fd,color:#f5f3ff,stroke-width:1.5px;
+  classDef auto fill:#4f46e5,stroke:#a5b4fc,color:#eef2ff,stroke-width:1.5px;
+  classDef app fill:#a21caf,stroke:#f0abfc,color:#fdf4ff,stroke-width:1.5px;
+  classDef sim fill:#1f2937,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
+
   HW[Hardware Layer\ndriver, peripherals, ascamera]
   IFACE[Interface Layer\ninterfaces, custom msgs, services]
   START[Startup and Calibration\nbringup, calibration]
@@ -145,6 +194,10 @@ flowchart TB
   AUTO --> APP
   SIM -. provides model and frames .-> START
   SIM -. provides model and frames .-> RV[RViz and Simulation]
+
+  class HW,START,AUTO,APP,SIM hw;
+  class IFACE iface;
+  class RV sim;
 ```
 
 ## 3. Responsibilities by major package
@@ -461,7 +514,28 @@ TF is one of the most important ROS concepts for mobile robots, because it lets 
 - Navigation can only generate safe commands if it can transform robot pose, obstacle data, and goals into compatible frames.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#1e293b',
+  'primaryTextColor': '#e2e8f0',
+  'primaryBorderColor': '#7dd3fc',
+  'lineColor': '#93c5fd',
+  'secondaryColor': '#0f172a',
+  'tertiaryColor': '#111827',
+  'background': '#020817',
+  'mainBkg': '#0f172a',
+  'nodeBorder': '#7dd3fc',
+  'clusterBkg': '#0f172a',
+  'clusterBorder': '#93c5fd',
+  'textColor': '#e2e8f0',
+  'fontFamily': 'Arial',
+  'fontSize': '14px'
+}}}%%
 flowchart LR
+  classDef sensor fill:#2563eb,stroke:#93c5fd,color:#eff6ff,stroke-width:1.5px;
+  classDef state fill:#0f766e,stroke:#99f6e4,color:#ecfeff,stroke-width:1.5px;
+  classDef nav fill:#4f46e5,stroke:#a5b4fc,color:#eef2ff,stroke-width:1.5px;
+  classDef cmd fill:#7c3aed,stroke:#c4b5fd,color:#f5f3ff,stroke-width:1.5px;
+  classDef tool fill:#1f2937,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
   SCAN["/scan or /scan_raw\\nLaserScan"]
   ODOM["/odom\\nOdometry"]
   TF["/tf and /tf_static\\nTransforms"]
@@ -484,12 +558,37 @@ flowchart LR
   NAV2 --> CMD
   TELEOP[Teleop] --> CMD
   CMD --> BASEDRV
+
+  class SCAN, LIDAR sensor;
+  class ODOM, TF, MAP, ROBOTDESC, SLAM2 state;
+  class NAV2 nav;
+  class CMD, TELEOP cmd;
+  class BASEDRV tool;
 ```
 
 The exact names above may differ on your robot. The point of the diagram is conceptual: identify the scan source, odometry source, TF publishers, map producer, and command consumer, then verify that the data dependencies are connected on the live system.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#1e293b',
+  'primaryTextColor': '#e2e8f0',
+  'primaryBorderColor': '#7dd3fc',
+  'lineColor': '#93c5fd',
+  'secondaryColor': '#0f172a',
+  'tertiaryColor': '#111827',
+  'background': '#020817',
+  'mainBkg': '#0f172a',
+  'nodeBorder': '#7dd3fc',
+  'clusterBkg': '#0f172a',
+  'clusterBorder': '#93c5fd',
+  'textColor': '#e2e8f0',
+  'fontFamily': 'Arial',
+  'fontSize': '14px'
+}}}%%
 flowchart TB
+  classDef frame fill:#0f766e,stroke:#99f6e4,color:#ecfeff,stroke-width:1.5px;
+  classDef sensor fill:#2563eb,stroke:#93c5fd,color:#eff6ff,stroke-width:1.5px;
+
   MAPF[map]
   ODOMF[odom]
   BASEF[base_link]
@@ -500,6 +599,9 @@ flowchart TB
   ODOMF --> BASEF
   BASEF --> LIDARF
   BASEF --> CAMF
+
+  class MAPF, ODOMF, BASEF frame;
+  class LIDARF, CAMF sensor;
 ```
 
 This TF diagram is also conceptual. The exact frame IDs on MentorPi must be confirmed on the running robot by inspecting `/tf` in RViz or by using TF tools. What matters is the role of each link in the chain:
