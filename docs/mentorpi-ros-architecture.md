@@ -559,10 +559,10 @@ flowchart LR
   TELEOP[Teleop] --> CMD
   CMD --> BASEDRV
 
-  class SCAN, LIDAR sensor;
-  class ODOM, TF, MAP, ROBOTDESC, SLAM2 state;
+  class SCAN,LIDAR sensor;
+  class ODOM,TF,MAP,ROBOTDESC,SLAM2 state;
   class NAV2 nav;
-  class CMD, TELEOP cmd;
+  class CMD,TELEOP cmd;
   class BASEDRV tool;
 ```
 
@@ -600,8 +600,8 @@ flowchart TB
   BASEF --> LIDARF
   BASEF --> CAMF
 
-  class MAPF, ODOMF, BASEF frame;
-  class LIDARF, CAMF sensor;
+  class MAPF,ODOMF,BASEF frame;
+  class LIDARF,CAMF sensor;
 ```
 
 This TF diagram is also conceptual. The exact frame IDs on MentorPi must be confirmed on the running robot by inspecting `/tf` in RViz or by using TF tools. What matters is the role of each link in the chain:
