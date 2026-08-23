@@ -62,7 +62,7 @@ flowchart LR
   A --> B --> C
 
   subgraph Core
-    D[startup_check]
+    D["startup_check\n50 s delay → buzzer + OLED\nShows WiFi SSID and IP"]
     E["ros_robot_controller\nSTM32 ↔ ROS 2 via UART\n→ /ros_robot_controller/imu_raw\nMotorsState → PWM"]
     F["odom_publisher\nmecanum kinematics\n136.8 / 144.6 / 65 mm\n→ /odom_raw @ 50 Hz"]
     G1["imu_calib\n/imu_raw → /imu_corrected"]
@@ -122,9 +122,9 @@ If any Core node crashes, the chassis stops responding to commands.
 
 | Node | Package | Subscribes | Publishes |
 |---|---|---|---|
-| `startup_check` | `bringup` | — | logs only |
+| `startup_check` | `bringup` | — | `/ros_robot_controller/set_buzzer`, `/ros_robot_controller/set_oled` (waits 50 s, then beeps and shows WiFi SSID + IP on OLED) |
 | `ros_robot_controller` | `ros_robot_controller` | `ros_robot_controller/set_motor` (`MotorsState`) | `/ros_robot_controller/imu_raw` (`Imu`) |
-| `odom_publisher` | `controller` | `controller/cmd_vel` (`Twist`) | `/odom_raw` (`Odometry`) |
+| `odom_publisher` | `controller` | `controller/cmd_vel` (`Twist`), `set_odom` (`Pose2D`), `cmd_vel` (`Twist`) | `/odom_raw` (`Odometry`), `ros_robot_controller/set_motor` (`MotorsState`), `set_pose` (`PoseWithCovarianceStamped`) |
 | `imu_calib` | `imu_calib` | `/ros_robot_controller/imu_raw` | `/imu_corrected` (`Imu`) |
 | `imu_filter` | `imu_complementary_filter` | `/imu_corrected` | `/imu` (`Imu`) |
 | `ekf_filter_node` | `robot_localization` | `/odom_raw`, `/imu` | `/odom` (`Odometry`), `odom→base_footprint` TF |

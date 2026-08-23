@@ -4,8 +4,6 @@ This document is the workspace-level architecture reference for MentorPi ROS 2 p
 
 It is intended to help a newcomer build a practical mental model of how MentorPi works end-to-end: hardware drivers produce robot state and sensor data, TF connects those data streams into a shared coordinate story, SLAM and navigation use that shared state to reason about the world, and behavior packages turn goals into visible robot actions.
 
-When topic names, node names, or frame IDs are mentioned below, treat them as typical or expected examples unless they are explicitly confirmed in your running system. On a live robot, always verify with `ros2 topic list`, `ros2 node list`, and TF inspection in RViz.
-
 ## 1. High-level view
 
 MentorPi is organized as layered ROS 2 subsystems:
@@ -356,196 +354,57 @@ How to verify:
 
 ### calibration
 
-Linear/angular calibration and tuning tools.
+Calibration and tuning tools for mecanum kinematics and IMU.
 
-What it provides:
+The IMU calibration config is at `calibration/config/imu_calib.yaml` and is consumed by `imu_calib` at runtime. Better calibration directly improves the accuracy of SLAM, navigation, and teleop.
 
-- `calibration` helps make commanded motion match physical motion more accurately.
-- This matters because both SLAM and navigation become unreliable if the robot consistently over-rotates, under-rotates, or reports bad odometry.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include tools that compare commanded motion versus observed motion using odometry, IMU, or operator measurements.
-
-How it connects to other packages:
-
-- Better calibration improves `driver` outputs, which directly improves `slam`, `navigation`, and teleop behavior.
-
-How to verify:
-
-- Drive a simple straight line or rotate-in-place test and compare commanded versus observed movement.
-- Plot odometry and IMU signals to check for obvious scaling or bias problems.
+How to verify: drive a straight line or rotate in place and compare commanded versus observed movement; plot `/odom_raw` and `/imu` to check for obvious scaling or bias.
 
 ### slam
 
-Mapping and localization workflows (including RViz helpers).
+Mapping and localization, with RViz helpers.
 
-What it provides:
+Consumes `/scan`, `/odom`, and TF from the base stack; produces the `/map` topic and the `map → odom` transform. The `map → odom` link corrects odometry drift without forcing the `odom` frame to jump. SLAM must be healthy before navigation can plan globally.
 
-- `slam` packages estimate where the robot is while building or refining a map.
-- For a beginner, the key idea is that SLAM sits above raw odometry: it watches sensor data and uses it to correct the robot's long-term world estimate.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include lidar scan subscriptions such as `/scan`, odometry or TF inputs, a map topic such as `/map`, and a `map -> odom` transform.
-
-How it connects to other packages:
-
-- `slam` consumes state from `driver` and `peripherals` and produces global context that `navigation` and RViz rely on.
-- If `slam` is not running, the robot may still drive, but global mapping and map-based planning will be limited or unavailable.
-
-What this means for `odom` vs `map`:
-
-- `odom` is your short-term motion estimate. It should change smoothly and continuously as the robot moves.
-- `map` is your corrected world reference. SLAM or localization is responsible for keeping the robot aligned to it.
-- The transform `map -> odom` is the bridge between those two ideas: it corrects odometry drift without forcing the `odom` frame itself to jump every time the estimate improves.
-
-How to verify:
-
-- Confirm scan data exists and TF is connected from sensor frames back to the base.
-- In RViz, verify that the map appears, updates, and remains consistent as the robot moves.
-- Check whether a `map` frame and a `map -> odom` relationship exist in the TF tree.
+How to verify in RViz: set Fixed Frame to `odom`, add Map + TF + LaserScan. Drive the robot and confirm the map builds without visible drift.
 
 ### navigation
 
-Goal-driven autonomous navigation and integration launches.
+Goal-driven autonomous navigation (Nav2-style).
 
-What it provides:
+Consumes `/map`, `/odom`, `/scan`, and TF; outputs `/cmd_vel` to the same base driver path used by teleop. Navigation sits above the driver and TF — if the base stack is unhealthy, planning fails even if the navigation nodes are running.
 
-- `navigation` usually hosts the Nav2-style stack that takes a goal pose and turns it into safe motion commands.
-- It plans where the robot should go, reasons about obstacles through costmaps, and publishes movement commands back to the base.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include goal inputs, local and global costmaps, planned paths, robot pose estimates, and velocity outputs such as `/cmd_vel`.
-- Exact topic names vary, so validate them on the live system.
-
-How it connects to other packages:
-
-- `navigation` depends on `slam` or localization, a valid TF tree, and reliable odometry.
-- It sends command outputs to the same lower-level base driver path used by teleop.
-
-What this means in practice:
-
-- Navigation does not replace the driver. It sits above it.
-- Navigation also does not replace TF. It depends on TF to understand where the robot is, where obstacles are, and how to transform data between frames.
-
-How to verify:
-
-- In RViz, send a goal and confirm that a path appears and the robot pose updates correctly.
-- Check that `/cmd_vel` is active while navigation is moving the robot.
-- If planning fails, inspect whether `/map`, `/odom`, `/tf`, and scan topics are all present and consistent.
+How to verify: send a goal in RViz and confirm a path appears; check `/cmd_vel` is active while the robot moves. If planning fails, verify `/map`, `/odom`, `/tf`, and `/scan` are all alive first.
 
 ### multi
 
-Multi-robot coordination, TF and follower workflows.
+Multi-robot coordination, namespaced TF and follower workflows.
 
-What it provides:
-
-- `multi` supports workflows where more than one robot or robot namespace is active.
-- It typically addresses duplicated topics, namespaced TF, and follow/coordination behavior.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include namespaced odometry, scan, TF, and command topics for each robot instance.
-
-How it connects to other packages:
-
-- It layers on top of the same base building blocks as single-robot bringup, but adds namespace and coordination logic.
-
-How to verify:
-
-- Check that each robot has distinct nodes, topics, and frame names or namespaces as intended.
-- In RViz, verify that TF from one robot does not accidentally collide with another robot's frames.
+Layers namespace and coordination logic on top of the standard single-robot bringup. Each robot instance needs distinct topic and TF namespaces to avoid collisions. Verify with `ros2 topic list` and RViz that frames and topics are properly separated per robot.
 
 ### app/example
 
 Task-level behaviors and demos.
 
-What it provides:
-
-- `app` and `example` are where users usually see visible robot behavior first.
-- They contain task logic, demos, integration examples, and higher-level decision-making built on top of the lower stack.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include behavior nodes that subscribe to sensor, navigation, or detection outputs and then trigger actions, speech, movement, or UI responses.
-
-How it connects to other packages:
-
-- These packages sit above `driver`, `peripherals`, `slam`, `navigation`, or perception systems and orchestrate them into complete use cases.
-
-How to verify:
-
-- Start the behavior and confirm its required inputs exist first.
-- Use `ros2 topic list` and RViz to check that the behavior's perception and motion dependencies are healthy before debugging the behavior logic itself.
+The highest-level packages in the stack. Behavior nodes subscribe to sensor, navigation, or detection outputs and publish `/cmd_vel` or call control services. All required inputs (driver, sensors, SLAM/nav if needed) must be confirmed healthy before debugging behavior logic.
 
 ### large_models and large_models_msgs
 
-AI-driven behaviors and their interface contracts.
+AI-driven behaviors and their message contracts.
 
-What it provides:
-
-- `large_models` contains AI-oriented robot logic, while `large_models_msgs` defines the messages and services needed to connect that logic to the rest of the system.
-- This split follows a common ROS pattern: keep interface contracts stable and reusable even if the behavior implementation changes.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include task request topics, AI result messages, or services for behavior triggering and response handling.
-
-How it connects to other packages:
-
-- These packages often consume perception, robot state, and application events, then produce behavior decisions or structured outputs for `app`-level consumers.
-
-How to verify:
-
-- Confirm that the required custom message packages are built and sourced.
-- Use `ros2 interface list` and `ros2 topic info` to validate that publishers and subscribers agree on message types.
+`large_models_msgs` defines custom message and service types shared across AI behaviors; `large_models` contains the behavior nodes. Build `large_models_msgs` before any dependent package. Verify with `ros2 interface list` that types are sourced correctly after rebuilding.
 
 ### yolov5_ros2
 
-Object-detection integration and ROS topic publishing.
+Object-detection pipeline integrated as a ROS node.
 
-What it provides:
-
-- `yolov5_ros2` connects an object-detection pipeline to ROS topics.
-- It is usually part of the perception-to-behavior path rather than the base mobility path.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include image subscriptions, detection result topics, bounding boxes, or annotated image outputs.
-
-How it connects to other packages:
-
-- It depends on camera topics from `peripherals` or `ascamera` and can feed results into `app`, `example`, or AI behaviors.
-
-How to verify:
-
-- Confirm that image topics are alive before debugging detection.
-- If detections are missing, inspect image transport, frame rate, and whether the model node is receiving the expected encoding and resolution.
+Subscribes to camera image topics from `peripherals` / `ascamera`; publishes detection results consumed by `app` or AI behaviors. If detections are missing, verify the camera image topic is alive at the expected frame rate before debugging the detection model.
 
 ### mentorpi_description
 
-URDF/TF description for visualization and simulation usage.
+URDF robot model for RViz and simulation.
 
-What it provides:
-
-- `mentorpi_description` describes the robot's geometry, links, joints, and static relationships.
-- It is crucial for RViz because it gives shape and meaning to the TF tree.
-
-Typical nodes, topics, and interfaces:
-
-- Typical or expected examples include robot description parameters, joint state usage, and static transforms that connect sensors to `base_link`.
-
-How it connects to other packages:
-
-- `bringup`, RViz, simulation, and autonomy stacks all benefit from a correct robot description.
-- If this layer is wrong, the robot may still publish data, but visual alignment and frame reasoning become confusing or incorrect.
-
-How to verify:
-
-- In RViz, confirm that the robot model aligns with scan and camera data.
-- Check that frames such as `base_link`, lidar, and camera frames appear where you expect them.
+Provides the geometry, links, and joints that `robot_state_publisher` uses to publish static TF transforms. Without this, the TF tree below `base_footprint` is incomplete and RViz cannot render the robot model. Verify in RViz that the model aligns with scan and camera data.
 
 ### TF and topic flow mental model
 
