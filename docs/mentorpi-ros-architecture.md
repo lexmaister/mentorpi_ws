@@ -241,7 +241,7 @@ What it provides:
 - `ros_robot_controller` is the UART bridge between ROS 2 and the STM32 board. It reads raw IMU data (accelerometer + gyroscope) from the board and publishes `sensor_msgs/Imu` on `/ros_robot_controller/imu_raw`. In the other direction it receives `MotorsState` commands and converts them to PWM signals via the board SDK. It also drives board peripherals: LEDs, buzzer, OLED display, servos.
 - `odom_publisher` computes odometry from the mecanum kinematic model (wheelbase 136.8 mm, track width 144.6 mm, wheel diameter 65 mm). It integrates velocity commands every 20 ms and publishes `nav_msgs/Odometry` on `/odom_raw` at 50 Hz.
 - `ekf_filter_node` (`robot_localization` package) fuses `/odom_raw` and `/imu` into a single state estimate and publishes the result on `/odom`. It also broadcasts the `odom → base_footprint` transform on `/tf`.
-- `init_pose` reads `config/init_pose.yaml` and publishes `PoseWithCovarianceStamped` on `/set_pose` to seed the EKF with a known starting pose.
+- `init_pose` reads `config/init_pose.yaml` and `/home/ubuntu/software/Servo_upper_computer/servo_config.yaml`, computes final PWM positions (`pulse + offset + 1500`) for servo ids 1–4, and publishes `SetPWMServoState` on `ros_robot_controller/pwm_servo/set_state` to move the camera mount and other servos to their home position. It also advertises `~/init_finish` so `startup_check` can confirm the node is ready.
 
 Confirmed nodes, topics, and interfaces:
 
@@ -250,7 +250,7 @@ Confirmed nodes, topics, and interfaces:
 | `ros_robot_controller` | `ros_robot_controller/set_motor` (`MotorsState`) | `/ros_robot_controller/imu_raw` (`Imu`) |
 | `odom_publisher` | `controller/cmd_vel` (`Twist`) | `/odom_raw` (`Odometry`) |
 | `ekf_filter_node` | `/odom_raw`, `/imu` | `/odom` (`Odometry`), `odom→base_footprint` TF |
-| `init_pose` | — | `/set_pose` (`PoseWithCovarianceStamped`) |
+| `init_pose` | — | `ros_robot_controller/pwm_servo/set_state` (`SetPWMServoState`) |
 
 How it connects to other packages:
 

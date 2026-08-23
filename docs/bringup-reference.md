@@ -68,7 +68,7 @@ flowchart LR
     G1["imu_calib\n/imu_raw → /imu_corrected"]
     G2["imu_filter\n/imu_corrected → /imu"]
     G["ekf_filter_node\n/odom_raw + /imu → /odom\nodom → base_footprint TF"]
-    H["init_pose\ninit_pose.yaml → /set_pose"]
+    H["init_pose\ninit_pose.yaml + servo_config.yaml\n→ pwm_servo/set_state\nPWM servos to home position"]
     I["joy_node  /dev/input/js0\n+ joystick_control\n→ /controller/cmd_vel\n0.5 m/s · 2.0 rad/s"]
   end
 
@@ -128,7 +128,7 @@ If any Core node crashes, the chassis stops responding to commands.
 | `imu_calib` | `imu_calib` | `/ros_robot_controller/imu_raw` | `/imu_corrected` (`Imu`) |
 | `imu_filter` | `imu_complementary_filter` | `/imu_corrected` | `/imu` (`Imu`) |
 | `ekf_filter_node` | `robot_localization` | `/odom_raw`, `/imu` | `/odom` (`Odometry`), `odom→base_footprint` TF |
-| `init_pose` | `controller` | — | `/set_pose` (`PoseWithCovarianceStamped`) |
+| `init_pose` | `controller` | — | `ros_robot_controller/pwm_servo/set_state` (`SetPWMServoState`) |
 | `joy_node` | `joy` | `/dev/input/js0` | `sensor_msgs/Joy` |
 | `joystick_control` | `peripherals` | `sensor_msgs/Joy` | `/controller/cmd_vel` (`Twist`) |
 
@@ -175,7 +175,9 @@ These components can be stopped independently without affecting chassis control.
 /imu                            # after imu_filter (complementary)
 /odom_raw                       # mecanum kinematics only
 /odom                           # EKF-fused, used by SLAM and navigation
-/set_pose                       # EKF initialisation
+
+# Servo initialisation
+ros_robot_controller/pwm_servo/set_state  # PWM servos to home position (init_pose)
 
 # Motion control
 /controller/cmd_vel             # Twist from joystick or app
