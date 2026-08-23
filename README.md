@@ -20,13 +20,14 @@ Start here and then open the guides below:
 
 1. [Docker setup and daily workflow](docs/getting-started-docker.md)
 2. [MentorPi ROS system architecture](docs/mentorpi-ros-architecture.md)
-3. [Using Ascamera package (ascamera)](docs/ascamera-guide.md)
-4. [Run without full robot hardware](docs/working-without-robot.md)
-5. [Debug from another PC](docs/debug-from-external-pc.md)
-6. [Learning use-case playbooks](docs/learning-use-cases.md)
-7. [Command cheat sheet](docs/command-cheat-sheet.md)
-8. [Learning plan (8 weeks + extensions)](docs/learning-plan.md)
-9. [Troubleshooting](docs/troubleshooting.md)
+3. [Bringup reference — boot chain, node table, topic set](docs/bringup-reference.md)
+4. [Using Ascamera package (ascamera)](docs/ascamera-guide.md)
+5. [Run without full robot hardware](docs/working-without-robot.md)
+6. [Debug from another PC](docs/debug-from-external-pc.md)
+7. [Learning use-case playbooks](docs/learning-use-cases.md)
+8. [Command cheat sheet](docs/command-cheat-sheet.md)
+9. [Learning plan (8 weeks + extensions)](docs/learning-plan.md)
+10. [Troubleshooting](docs/troubleshooting.md)
 
 ## Quick start (Linux + Docker)
 

@@ -34,13 +34,38 @@ What this means in practice:
 
 What happens when you drive it with a joystick:
 
-1. a teleop or input node reads joystick events
-2. it publishes a velocity command, typically on a topic such as `/cmd_vel`
-3. the base driver consumes that command and sends motor-level instructions to the controller board
-4. wheel motion produces fresh odometry and TF updates, typically around `/odom` and `/tf`
-5. SLAM, navigation, RViz, and logging tools observe those updates to track robot motion
+1. `joy_node` reads `/dev/input/js0` and publishes `sensor_msgs/Joy`
+2. `joystick_control` converts axes to `geometry_msgs/Twist` on `/controller/cmd_vel` (max 0.5 m/s linear, 2.0 rad/s angular)
+3. `odom_publisher` applies the mecanum kinematic model and sends `MotorsState` to `ros_robot_controller`
+4. `ros_robot_controller` converts motor speeds to PWM via the board SDK; the STM32 drives the motors
+5. `odom_publisher` integrates the commanded velocity and publishes raw odometry on `/odom_raw`
+6. `ekf_filter_node` fuses `/odom_raw` and `/imu` and publishes the smoothed estimate on `/odom` plus the `odom → base_footprint` TF
+7. SLAM, navigation, RViz, and PlotJuggler observe `/odom` and `/tf` to track robot motion
 
-This is the main control loop viewers should keep in mind: commands go down toward the base driver, while state and sensor observations flow up toward localization, planning, and visualization.
+This is the main control loop: commands go down toward the base driver, while state and sensor observations flow up toward localization, planning, and visualization.
+
+### After bringup: what's running
+
+When the robot boots, `systemd` runs `start_node.service`, which calls `start_node.sh`, which runs `ros2 launch bringup bringup.launch.py` inside the Docker container. Three groups of components come up together:
+
+| Group | Purpose | Can crash without stopping chassis? |
+|---|---|---|
+| **Core** | Motion control, odometry, IMU fusion, EKF, teleop | No — any failure stops the robot |
+| **Sensors** | Lidar, depth camera, TF/URDF | Yes — robot still drives, loses perception |
+| **Services** | rosbridge (9090), web video (8080), app scenarios | Yes — independent of motion |
+
+Key topics confirmed after a normal bringup:
+
+```
+/odom          ← EKF output (used by SLAM + nav)
+/odom_raw      ← mecanum kinematics only
+/imu           ← complementary-filtered IMU
+/scan          ← LaserScan from lidar
+/depth_cam/rgb/image_raw  ← HP60C colour frames
+/tf            ← odom→base_footprint→lidar_frame→…
+```
+
+For the full boot chain, node-by-node table, and per-topic reference see [bringup-reference.md](bringup-reference.md).
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {
@@ -111,7 +136,7 @@ flowchart LR
 - costmap: a grid representation of nearby obstacles and traversability used by planners and controllers.
 - `odom` frame: a locally smooth frame used for short-term motion tracking. It should not jump suddenly, but it can drift relative to the world.
 - `map` frame: a world-referenced frame used by SLAM or localization. It provides long-term global consistency and may correct drift relative to `odom`.
-- `base_link`: the conventional frame attached to the robot body, used as the main reference for robot motion and attached sensors.
+- `base_link` / `base_footprint`: the frame attached to the robot body. MentorPi uses `base_footprint` as the robot root frame. `odom_publisher` publishes the `odom → base_footprint` TF; `robot_state_publisher` adds all static sensor frames below it.
 
 ## 2. Package map
 
@@ -206,111 +231,128 @@ flowchart TB
 
 Low-level robot control and bridge to controller board.
 
-- `controller`: Python-side control workflows
-- `ros_robot_controller`: ROS interface runtime
-- `ros_robot_controller_msgs`: custom messages/services
-- `sdk`: helper SDK components
+- `controller`: Python-side kinematic and odometry logic (`odom_publisher`, `init_pose`)
+- `ros_robot_controller`: UART bridge node to the STM32 board
+- `ros_robot_controller_msgs`: custom `MotorsState`, `BuzzerState`, `LedState`, etc.
+- `sdk`: board SDK used by `ros_robot_controller`
 
 What it provides:
 
-- The `driver` area is where ROS commands are translated into hardware actions and hardware feedback is translated back into ROS messages.
-- It is the closest software layer to the motor controller and other core robot electronics.
+- `ros_robot_controller` is the UART bridge between ROS 2 and the STM32 board. It reads raw IMU data (accelerometer + gyroscope) from the board and publishes `sensor_msgs/Imu` on `/ros_robot_controller/imu_raw`. In the other direction it receives `MotorsState` commands and converts them to PWM signals via the board SDK. It also drives board peripherals: LEDs, buzzer, OLED display, servos.
+- `odom_publisher` computes odometry from the mecanum kinematic model (wheelbase 136.8 mm, track width 144.6 mm, wheel diameter 65 mm). It integrates velocity commands every 20 ms and publishes `nav_msgs/Odometry` on `/odom_raw` at 50 Hz.
+- `ekf_filter_node` (`robot_localization` package) fuses `/odom_raw` and `/imu` into a single state estimate and publishes the result on `/odom`. It also broadcasts the `odom → base_footprint` transform on `/tf`.
+- `init_pose` reads `config/init_pose.yaml` and publishes `PoseWithCovarianceStamped` on `/set_pose` to seed the EKF with a known starting pose.
 
-Typical nodes, topics, and interfaces:
+Confirmed nodes, topics, and interfaces:
 
-- Typical or expected examples include command subscribers such as `/cmd_vel`, odometry publishers such as `/odom`, and TF publishers that connect robot frames into the rest of the graph.
-- It may also expose custom services or messages through `ros_robot_controller_msgs` for controller-specific capabilities.
+| Node | Subscribes | Publishes |
+|---|---|---|
+| `ros_robot_controller` | `ros_robot_controller/set_motor` (`MotorsState`) | `/ros_robot_controller/imu_raw` (`Imu`) |
+| `odom_publisher` | `controller/cmd_vel` (`Twist`) | `/odom_raw` (`Odometry`) |
+| `ekf_filter_node` | `/odom_raw`, `/imu` | `/odom` (`Odometry`), `odom→base_footprint` TF |
+| `init_pose` | — | `/set_pose` (`PoseWithCovarianceStamped`) |
 
 How it connects to other packages:
 
-- `bringup` usually launches the driver-side runtime.
-- `navigation`, `app`, and teleop flows depend on the driver accepting velocity commands.
-- RViz and PlotJuggler help verify that odometry and state feedback are being published at a steady rate.
+- `bringup` launches the full driver stack via `controller.launch.py`.
+- `navigation`, `app`, and teleop flows send `Twist` on `/controller/cmd_vel` → `odom_publisher` → `MotorsState` → `ros_robot_controller`.
+- `/odom` from `ekf_filter_node` is the primary odometry input for SLAM and navigation.
 
 How to verify:
 
-- Check `ros2 node list` for controller-related nodes.
-- Check `ros2 topic list` for expected state and command topics.
-- Use `ros2 topic echo` or PlotJuggler to confirm odometry is changing when the robot moves.
+- `ros2 topic hz /odom_raw` — should update at ~50 Hz while the robot is powered.
+- `ros2 topic echo /ros_robot_controller/imu_raw` — should show gyro and accelerometer data.
+- `ros2 topic echo /odom` — values should change when the robot moves.
+- In PlotJuggler, plot `/odom/pose/pose/position/x` and `y` while driving a square.
 
 ### peripherals
 
 External devices and operator input.
 
-- joystick and keyboard teleop
-- IMU and filtering helpers
-- camera and lidar launch wrappers
+- joystick teleop (`joy_node` + `joystick_control`)
+- IMU calibration and filtering (`imu_calib`, `imu_filter`)
+- lidar driver wrapper (MS200 or LD19, selected by `$LIDAR_TYPE`)
+- depth camera wrapper (delegates to `ascamera` or USB cam)
 
 What it provides:
 
-- `peripherals` connects the robot to operator input devices and common external sensors.
-- It is often the package group that turns raw accessories into ROS-friendly streams.
+- **Joystick**: `joy_node` reads `/dev/input/js0` at 20 Hz and publishes `sensor_msgs/Joy`. `joystick_control` maps axes to linear (max 0.5 m/s) and angular (max 2.0 rad/s) velocity and publishes `geometry_msgs/Twist` on `/controller/cmd_vel`.
+- **IMU pipeline**: `imu_calib` applies calibration offsets from `calibration/config/imu_calib.yaml` to `/ros_robot_controller/imu_raw` → `/imu_corrected`. `imu_filter` (complementary filter, launched with a 5-second delay) fuses accelerometer and gyroscope and publishes `sensor_msgs/Imu` on `/imu`.
+- **Lidar**: wraps the vendor driver (MS200 or LD19) and publishes `sensor_msgs/LaserScan` on `/scan` with `frame_id: lidar_frame`. The lidar type is selected at runtime via the `$LIDAR_TYPE` environment variable.
+- **Depth camera**: delegates to the `ascamera` launch or a USB-cam fallback depending on `$DEPTH_CAMERA_TYPE`.
 
-Typical nodes, topics, and interfaces:
+Confirmed topics:
 
-- Typical or expected examples include joystick input, teleop command publication, IMU topics, lidar scans such as `/scan`, and camera image topics.
-- If filtering or republishing is involved, this package may also publish cleaned or remapped sensor topics.
+| Node | Publishes |
+|---|---|
+| `joy_node` | `sensor_msgs/Joy` |
+| `joystick_control` | `/controller/cmd_vel` (`Twist`, max 0.5 m/s / 2.0 rad/s) |
+| `imu_calib` | `/imu_corrected` (`Imu`) |
+| `imu_filter` | `/imu` (`Imu`) |
+| lidar driver | `/scan` (`LaserScan`, `frame_id: lidar_frame`) |
 
 How it connects to other packages:
 
-- Teleop flows feed into the base command path, usually through `/cmd_vel`.
-- Sensor outputs feed into `slam`, `navigation`, `app`, `example`, or external visualization tools.
+- `/controller/cmd_vel` feeds `odom_publisher` in `driver`, which converts it to per-wheel speeds.
+- `/imu` feeds `ekf_filter_node` in `driver`.
+- `/scan` is the primary input for SLAM and navigation costmaps.
 
 How to verify:
 
-- Use `ros2 topic list` to confirm joystick, IMU, lidar, or camera topics are present.
-- Use `ros2 topic hz /scan` or the appropriate scan topic to confirm sensor activity.
-- In RViz, confirm that scan data appears in the correct place relative to the robot.
+- `ros2 topic hz /scan` — should show ~10–15 Hz for the lidar.
+- `ros2 topic echo /imu` — should show orientation changes when the robot rotates.
+- `ros2 topic echo /controller/cmd_vel` while pressing a joystick axis.
 
 ### ascamera
 
 Vendor depth-camera package (Ascamera/HP60 family).
 
-- C++ node and launch files
-- vendor libraries
-- configuration files
+- C++ node (`ascamera_node`) and per-model launch files
+- vendor libraries in `libs/`
+- per-model JSON configuration files in `configurationfiles/`
 
 What it provides:
 
-- `ascamera` is a vendor integration package for the HP60/Ascamera family, including the camera node implementation, launch files, vendor libraries, and sensor-specific configuration.
-- It is the most hardware-specific perception package in this workspace.
+- `ascamera_node` opens the HP60C over USB using the vendor SDK, reads colour and depth frames, and publishes them as ROS topics. It is the most hardware-specific perception node in this workspace.
 
-Typical nodes, topics, and interfaces:
+Confirmed topics and frames (HP60C model via `hp60c.launch.py`):
 
-- Typical or expected examples include image topics, depth topics, camera info topics, and a TF frame for the camera body or optical frame.
-- Exact topic names and frame IDs depend on the launch file and camera model, so confirm them on the live system.
+| Topic | Type |
+|---|---|
+| `/depth_cam/rgb/image_raw` | `sensor_msgs/Image` |
+| `/depth_cam/depth/image_raw` | `sensor_msgs/Image` |
+| `/depth_cam/rgb/camera_info` | `sensor_msgs/CameraInfo` |
+| `/depth_cam/depth/camera_info` | `sensor_msgs/CameraInfo` |
+
+TF frame: `ascamera_camera_link_0`. A static transform `ascamera_camera_link_0 → base_footprint` is published so camera data is expressed in the robot body frame.
 
 How it connects to other packages:
 
-- Perception-driven applications, AI pipelines, and RViz visualizations consume the camera outputs.
-- If camera data is fused with other sensors, those downstream packages also rely on its TF relationship to `base_link`.
+- `peripherals/depth_camera.launch.py` wraps this node when `$DEPTH_CAMERA_TYPE=ascamera`.
+- `app`, `yolov5_ros2`, and `large_models` consume the image topics.
+- `web_video_server` in the Services group streams `/depth_cam/rgb/image_raw` over HTTP.
 
 How to verify:
 
-- Run `ros2 topic list | grep image` or inspect the topic graph manually.
-- In RViz, confirm that camera data appears and the camera frame is attached to the expected TF tree.
+- `ros2 topic hz /depth_cam/rgb/image_raw` — should show the camera frame rate.
+- `ros2 topic echo /depth_cam/rgb/camera_info` — confirms calibration is loaded.
+- In RViz, add an Image display subscribed to `/depth_cam/rgb/image_raw`.
 
 ### bringup
 
 System startup composition and baseline runtime orchestration.
 
-What it provides:
-
-- `bringup` collects the packages required for a normal robot session and launches them in a coherent order.
-- It is where a user typically starts when they want the robot to behave like a complete system instead of a set of isolated nodes.
-
-Typical nodes, topics, and interfaces:
-
-- `bringup` often does not define the most recognizable topics itself; instead, it assembles launch-time configuration for base drivers, sensors, teleop, robot description, and sometimes autonomy.
+`bringup.launch.py` is the single entry point launched by `start_node.sh` inside the Docker container. It includes three launch groups: Core (motion + state), Sensors (lidar, camera, TF), and Services (rosbridge, web video, app scenarios). See [bringup-reference.md](bringup-reference.md) for the full boot chain, bringup fan-out diagram, node reference table, and minimum topic set.
 
 How it connects to other packages:
 
-- It depends on `driver`, `peripherals`, and interface packages, then creates the baseline that `slam`, `navigation`, and application packages assume exists.
+- Depends on `driver`, `peripherals`, `ascamera`, and `app`; produces the stable topic graph that `slam`, `navigation`, and external tools assume exists.
 
 How to verify:
 
-- After launch, `ros2 node list` should show a connected graph rather than isolated nodes.
-- In RViz, TF should form a connected tree rather than disconnected frame islands.
+- `ros2 node list | grep -E "ros_robot_controller|odom_publisher|ekf_filter|ascamera|startup_check"` — all should appear.
+- `ros2 topic list` should include `/odom`, `/odom_raw`, `/imu`, `/scan`, `/depth_cam/rgb/image_raw`.
+- In RViz, TF should show: `odom → base_footprint → lidar_frame` and `base_footprint → ascamera_camera_link_0`.
 
 ### calibration
 
@@ -591,9 +633,9 @@ flowchart TB
 
   MAPF[map]
   ODOMF[odom]
-  BASEF[base_link]
+  BASEF[base_footprint]
   LIDARF[lidar_frame]
-  CAMF[camera_frame]
+  CAMF[ascamera_camera_link_0]
 
   MAPF --> ODOMF
   ODOMF --> BASEF
@@ -604,11 +646,11 @@ flowchart TB
   class LIDARF,CAMF sensor;
 ```
 
-This TF diagram is also conceptual. The exact frame IDs on MentorPi must be confirmed on the running robot by inspecting `/tf` in RViz or by using TF tools. What matters is the role of each link in the chain:
+This TF diagram uses confirmed MentorPi frame IDs. What matters is the role of each link:
 
-- `map -> odom`: global correction from SLAM or localization
-- `odom -> base_link`: continuous local motion estimate from odometry
-- `base_link -> sensor frame`: where each sensor is physically mounted on the robot
+- `map → odom`: global correction published by SLAM or localization
+- `odom → base_footprint`: continuous local motion estimate from `ekf_filter_node`
+- `base_footprint → lidar_frame` / `ascamera_camera_link_0`: static sensor mounts from `robot_state_publisher`
 
 ## 4. Integration patterns
 
@@ -704,50 +746,64 @@ That separation makes it easier to test parts of the system independently and ea
 
 ## 7. Validation checklist (external PC)
 
-Use this as a quick live-system checklist during the entry-video workflow or any remote debugging session.
+Use this as a quick live-system checklist for any remote debugging session. For the full topic reference see [bringup-reference.md](bringup-reference.md).
 
-1. Discovery
+**Preconditions:** robot and laptop on the same network; `ROS_DOMAIN_ID` matching on both; `ROS_LOCALHOST_ONLY=0`.
+
+**Step 1 — Discovery**
 
 ```bash
 ros2 node list
 ros2 topic list
 ```
 
-Confirm that the expected driver, sensor, SLAM, or navigation nodes are visible from the external PC.
+Expect: `ros_robot_controller`, `odom_publisher`, `ekf_filter_node`, `joy_node`, `joystick_control`, `ascamera_node`, `startup_check`.
 
-2. Sensor sanity
-
-```bash
-ros2 topic hz /scan
-ros2 topic echo /odom
-```
-
-If your robot uses different topic names, substitute the live names you found with `ros2 topic list`.
-
-3. TF and robot model
-
-- Open RViz and display TF, RobotModel, LaserScan, and Map.
-- Confirm that the TF tree is connected and that scan data sits in the right place relative to the robot body.
-- Confirm that the `map -> odom -> base_link` chain exists conceptually, even if your actual frame IDs differ.
-
-4. Motion and estimation
+**Step 2 — Sensor sanity**
 
 ```bash
-ros2 topic hz /odom
+ros2 topic hz /scan          # expect 10–15 Hz
+ros2 topic hz /odom_raw      # expect ~50 Hz
+ros2 topic hz /odom          # expect ~50 Hz
+ros2 topic echo /imu --once  # expect orientation data
 ```
 
-- Use PlotJuggler to inspect odometry and IMU trends over time.
-- Drive the robot slowly and check that odometry direction, rotation, and rate look physically plausible.
+**Step 3 — TF and robot model (RViz)**
 
-5. Mapping and navigation
+- Fixed Frame: `odom`
+- Add: **TF**, **RobotModel** (`/robot_description`), **LaserScan** (`/scan`, size 0.03)
+- Confirm TF chain: `odom → base_footprint → lidar_frame → ascamera_camera_link_0`
+- Confirm scan points surround the robot model correctly
 
-- In RViz, verify that map, scan, and pose remain aligned while the robot moves.
-- If navigation is active, confirm that goals produce planned paths and outgoing velocity commands.
+**Step 4 — Motion and odometry (PlotJuggler)**
 
-6. If something is wrong, reduce the stack
+Plot these three groups while driving to see the full estimation pipeline:
 
-- First verify topics and TF from `driver` and `peripherals`.
-- Then verify `slam` or localization.
-- Only then debug `navigation` or higher-level behaviors.
+| Group | Signal | What it shows |
+|---|---|---|
+| Raw | `/ros_robot_controller/imu_raw/angular_velocity/z` | Noisy gyro from STM32 |
+| Raw | `/odom_raw/twist/twist/linear/x` | Kinematics before fusion |
+| Filtered | `/imu/angular_velocity/z` | After complementary filter |
+| Final | `/odom/pose/pose/position/x`, `.../y` | EKF output used by SLAM |
 
-That bottom-up order matches the real dependency chain and usually finds the root cause faster than debugging the highest-level package first.
+**Step 5 — Camera stream**
+
+```
+http://<robot-ip>:8080/stream?topic=/depth_cam/rgb/image_raw
+```
+
+Open in a browser (no ROS required on the client).
+
+**Step 6 — Mapping and navigation**
+
+- In RViz, add Map (`/map`) and confirm it updates while driving.
+- If navigation is active, confirm that goals produce planned paths and `/cmd_vel` is publishing.
+
+**Step 7 — If something is wrong: bottom-up debug order**
+
+1. Verify Core topics and TF (`/odom`, `/tf`, `ros_robot_controller` responsive)
+2. Verify Sensor topics (`/scan` rate, `/depth_cam` rate)
+3. Verify `slam` or localization output (`/map`, `map→odom` TF)
+4. Only then debug `navigation` or higher-level behaviors
+
+This order matches the dependency chain and finds root causes faster than starting at the top.
