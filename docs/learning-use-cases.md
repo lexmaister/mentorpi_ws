@@ -115,7 +115,7 @@ Steps:
 2. Set ROS networking env on external PC.
 3. Run RViz and diagnostics remotely.
 
-See full guide: [Debug MentorPi From Another PC](debug-from-external-pc.md)
+See full guide: [Debugging from a separate PC](../README.md#debugging-from-a-separate-pc)
 
 What you learn:
 

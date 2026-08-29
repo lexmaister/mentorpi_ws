@@ -23,11 +23,12 @@ Start here and then open the guides below:
 3. [Bringup reference — boot chain, node table, topic set](docs/bringup-reference.md)
 4. [Using Ascamera package (ascamera)](docs/ascamera-guide.md)
 5. [Run without full robot hardware](docs/working-without-robot.md)
-6. [Debug from another PC](docs/debug-from-external-pc.md)
-7. [Learning use-case playbooks](docs/learning-use-cases.md)
-8. [Command cheat sheet](docs/command-cheat-sheet.md)
-9. [Learning plan (8 weeks + extensions)](docs/learning-plan.md)
-10. [Troubleshooting](docs/troubleshooting.md)
+6. [Learning use-case playbooks](docs/learning-use-cases.md)
+7. [Command cheat sheet](docs/command-cheat-sheet.md)
+8. [Learning plan (8 weeks + extensions)](docs/learning-plan.md)
+9. [Troubleshooting](docs/troubleshooting.md)
+
+Remote debugging from a separate PC is covered directly in this README, see [Debugging from a separate PC](#debugging-from-a-separate-pc) below.
 
 ## Quick start (Linux + Docker)
 
@@ -112,3 +113,54 @@ If you want a fast start without robot hardware:
 - GUI tools (RViz/OpenCV windows) assume X11 forwarding from host to container
 
 For details, use the docs links above as the canonical source.
+
+## Debugging from a separate PC
+
+Use a second Linux PC to run compute/GUI-heavy tools (RViz, rqt, browser dashboards) while the robot container produces the data. The container uses `network_mode: host`, so these settings apply equally to the container and to a bare-metal ROS install on the laptop.
+
+### 1. Required environment on both the robot container and the external laptop
+
+```bash
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+export ROS_STATIC_PEERS=192.168.1.145;192.168.1.2   # robot IP;laptop IP (adjust to your network)
+```
+
+- `ROS_DOMAIN_ID` must match on both sides.
+- `ROS_LOCALHOST_ONLY=0` is required or nodes only see themselves.
+- `ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET` and `ROS_STATIC_PEERS` were found necessary in practice to get reliable discovery across two machines beyond default multicast discovery — set both, listing the IPs of every participant (robot and laptop), separated by `;`.
+- On the robot, export these before `ros2 launch bringup bringup.launch.py`, or bake them into `scripts/dev_env.sh` / `compose.yml` `environment:` so every container shell picks them up.
+- On the laptop, export them in the shell (or `~/.bashrc`) before running any `ros2`/RViz command.
+
+### 2. Verify connectivity
+
+On both machines:
+
+```bash
+echo "$ROS_DOMAIN_ID $ROS_LOCALHOST_ONLY $ROS_AUTOMATIC_DISCOVERY_RANGE $ROS_STATIC_PEERS"
+ros2 topic list
+ros2 node list
+```
+
+If the laptop sees the robot's topics/nodes, proceed to run RViz or other tools locally, pointed at the remote topics:
+
+```bash
+ros2 launch slam rviz_slam.launch.py
+ros2 topic hz /scan
+```
+
+### 3. Browser access to robot ports (no ROS install needed on the client)
+
+Bringup also exposes two HTTP/WebSocket services directly on the robot, reachable from any browser on the same network — no ROS environment variables required:
+
+- `http://<robot-ip>:8080` — `web_video_server`, MJPEG image streaming. Specific topic: `http://<robot-ip>:8080/stream?topic=/depth_cam/rgb/image_raw`.
+- `<robot-ip>:9090` — `rosbridge_websocket`, JSON-over-WebSocket access to all topics/services (used by the mobile app, or any `roslibjs` client).
+
+### 4. Common failure modes
+
+- `ROS_DOMAIN_ID` mismatch between robot and laptop.
+- Missing `ROS_STATIC_PEERS`/`ROS_AUTOMATIC_DISCOVERY_RANGE` — multicast discovery alone can silently fail across some routers/subnets.
+- Firewall blocking UDP discovery traffic or ports 8080/9090.
+- Different ROS distros with incompatible message definitions.
+- Robot stack not actually publishing the expected topics — check with `ros2 topic hz` on the robot first.
