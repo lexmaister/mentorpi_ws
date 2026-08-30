@@ -124,40 +124,89 @@ Use a second Linux PC to run compute/GUI-heavy tools (RViz, rqt, browser dashboa
 export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
-export ROS_STATIC_PEERS=192.168.1.145;192.168.1.2   # robot IP;laptop IP (adjust to your network)
+export ROS_STATIC_PEERS="<ROBOT_IP>;<PC_IP>"   # robot IP;laptop IP (adjust to your network)
 ```
 
 - `ROS_DOMAIN_ID` must match on both sides.
 - `ROS_LOCALHOST_ONLY=0` is required or nodes only see themselves.
 - `ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET` and `ROS_STATIC_PEERS` were found necessary in practice to get reliable discovery across two machines beyond default multicast discovery — set both, listing the IPs of every participant (robot and laptop), separated by `;`.
-- On the robot, export these before `ros2 launch bringup bringup.launch.py`, or bake them into `scripts/dev_env.sh` / `compose.yml` `environment:` so every container shell picks them up.
-- On the laptop, export them in the shell (or `~/.bashrc`) before running any `ros2`/RViz command.
 
-### 2. Verify connectivity
+### 2. Making the settings persistent
 
-On both machines:
+#### On the robot
+
+The robot container sources `/home/pi/docker/tmp/.typerc` on every shell startup. Edit that file to bake in the discovery variables so they survive restarts.
+
+1. **Back up the existing file** before editing:
+
+   ```bash
+   cp /home/pi/docker/tmp/.typerc /home/pi/docker/tmp/.typerc.bak
+   ```
+
+2. **Copy the updated `scripts/.typerc`** from this repository to the robot's shared directory `/home/pi/docker/tmp/.typerc`, then set your network IPs:
+
+   ```bash
+   # Run on the robot host (outside the container)
+   nano /home/pi/docker/tmp/.typerc      # update ROS_STATIC_PEERS to your robot and PC IPs
+   ```
+
+3. **Restart the ROS stack** so the new environment takes effect:
+
+   ```bash
+   /home/pi/mentorpi/start_node.sh > /dev/null 2>&1 &
+   ```
+
+4. **Enter the container** after beep signal from robot and verify the variables appear in the startup banner:
+
+   ```bash
+   /home/pi/enter_ros.sh
+   # Confirm STATIC_PEERS shows your robot and PC IPs
+   ```
+
+#### On the PC (dev container)
+
+`compose.yml` already has `ROS_AUTOMATIC_DISCOVERY_RANGE` and `ROS_STATIC_PEERS` in the `environment:` section. Adjust the IPs to match your network, then recreate the container:
+
+```bash
+docker compose down && docker compose up -d
+```
+
+### 3. Verify connectivity and validate
+
+**On both machines** — confirm the variables are active:
 
 ```bash
 echo "$ROS_DOMAIN_ID $ROS_LOCALHOST_ONLY $ROS_AUTOMATIC_DISCOVERY_RANGE $ROS_STATIC_PEERS"
-ros2 topic list
-ros2 node list
 ```
 
-If the laptop sees the robot's topics/nodes, proceed to run RViz or other tools locally, pointed at the remote topics:
+**On the robot** — note the baseline topic count:
 
 ```bash
-ros2 launch slam rviz_slam.launch.py
-ros2 topic hz /scan
+ros2 topic list | wc -l
 ```
 
-### 3. Browser access to robot ports (no ROS install needed on the client)
+**On the PC** — the same command should return a matching count (topics are shared across machines) - try twice if the first returned count doesn't match the robot's number:
+
+```bash
+ros2 topic list | wc -l
+```
+
+If the counts match, both sides see the robot's topics. Confirm odometry is flowing from the robot to the PC:
+
+```bash
+ros2 topic echo /odom_raw
+```
+
+If `ros2 topic list` returns only 1–3 topics (e.g. `/parameter_events`, `/rosout`), discovery is not working — revisit the settings in section 2.
+
+### 4. Browser access to robot ports (no ROS install needed on the client)
 
 Bringup also exposes two HTTP/WebSocket services directly on the robot, reachable from any browser on the same network — no ROS environment variables required:
 
 - `http://<robot-ip>:8080` — `web_video_server`, MJPEG image streaming. Specific topic: `http://<robot-ip>:8080/stream?topic=/depth_cam/rgb/image_raw`.
 - `<robot-ip>:9090` — `rosbridge_websocket`, JSON-over-WebSocket access to all topics/services (used by the mobile app, or any `roslibjs` client).
 
-### 4. Common failure modes
+### 5. Common failure modes
 
 - `ROS_DOMAIN_ID` mismatch between robot and laptop.
 - Missing `ROS_STATIC_PEERS`/`ROS_AUTOMATIC_DISCOVERY_RANGE` — multicast discovery alone can silently fail across some routers/subnets.

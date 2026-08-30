@@ -1,39 +1,46 @@
 #!/bin/bash
 
-# 当前版本
+# Version
 export VERSION="|V2.0.0|2025-07-10|"
 
-# 雷达类型：A1/A2/C1/G4/S2L/LD14P/MS200
+# LiDAR model: A1/A2/C1/G4/S2L/LD14P/MS200
 export LIDAR_TYPE=MS200
 
-# 深度摄像头类型：AstraPro/AstraProPlus/None
+# Depth camera driver: AstraPro/AstraProPlus/ascamera/None
 export DEPTH_CAMERA_TYPE=ascamera
 
-# 机器类型：JetAcker
+# Robot platform type
 export MACHINE_TYPE=MentorPi_Mecanum
 
-# 主从机设置：robot_xxx
+# Multi-robot: set HOST/MASTER to robot_N for multi-robot setups, or / for standalone
 export HOST=/ #robot_1
 export MASTER=/ #robot_1
 
-# 语言设置，主要涉及语音部分：Chinese/English
+# ASR language for voice features: Chinese/English
 export ASR_LANGUAGE=English
 
 export need_compile=False
-#export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# --- ROS 2 network ---
+# Domain ID must match on every machine in the same ROS network
 export ROS_DOMAIN_ID=0
-#export ROS_DOMAIN_ID=0
-#export ROS_LOCALHOST_ONLY=1
-export CYCLONEDDS_URI=file:///etc/cyclonedds/config.xml
+# Must be 0 for cross-machine visibility (1 restricts nodes to localhost only)
+export ROS_LOCALHOST_ONLY=0
+# Extend DDS discovery to the local subnet
+export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+# List every participant IP separated by ; — adjust robot IP and PC IP to your network
+export ROS_STATIC_PEERS="192.168.1.145;192.168.1.184"
 
 echo -e "\033[32m----------------------------------------------
-当前环境是ROS2|The current environment is ROS2
+Current environment: ROS 2
 ----------------------------------------------\033[0m"
-echo -e "LIDAR:   \033[32m$LIDAR_TYPE\033[0m"
-echo -e "CAMERA:  \033[32m$DEPTH_CAMERA_TYPE\033[0m"
-echo -e "MACHINE: \033[32m$MACHINE_TYPE\033[0m"
-echo -e "HOST:    \033[32m$HOST\033[0m"
-echo -e "MASTER:  \033[32m$MASTER\033[0m"
-echo -e "ROS_DOMAIN_ID: \033[32m$ROS_DOMAIN_ID\033[0m"
-echo -e "ASR_LANGUAGE: \033[32m$ASR_LANGUAGE\033[0m"
-echo -e "VERSION: \033[32m$VERSION\033[0m"
+echo -e "LIDAR:              \033[32m$LIDAR_TYPE\033[0m"
+echo -e "CAMERA:             \033[32m$DEPTH_CAMERA_TYPE\033[0m"
+echo -e "MACHINE:            \033[32m$MACHINE_TYPE\033[0m"
+echo -e "HOST:               \033[32m$HOST\033[0m"
+echo -e "MASTER:             \033[32m$MASTER\033[0m"
+echo -e "ROS_DOMAIN_ID:      \033[32m$ROS_DOMAIN_ID\033[0m"
+echo -e "ROS_LOCALHOST_ONLY: \033[32m$ROS_LOCALHOST_ONLY\033[0m"
+echo -e "STATIC_PEERS:       \033[32m$ROS_STATIC_PEERS\033[0m"
+echo -e "ASR_LANGUAGE:       \033[32m$ASR_LANGUAGE\033[0m"
+echo -e "VERSION:            \033[32m$VERSION\033[0m"

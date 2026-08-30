@@ -10,8 +10,13 @@ services:
     stdin_open: true
     working_dir: /ws
     environment:
+      # ROS 2 domain — must match on robot and any external PC
       ROS_DOMAIN_ID: 0
+      # 0 = cross-machine visible; 1 = localhost only
       ROS_LOCALHOST_ONLY: 0
+      # Multi-machine discovery — list every participant IP separated by ;
+      ROS_AUTOMATIC_DISCOVERY_RANGE: SUBNET
+      ROS_STATIC_PEERS: "192.168.1.145;192.168.1.184"  # robot IP;PC IP (adjust to your network)
       DISPLAY: ${DISPLAY}
       QT_X11_NO_MITSHM: 1
     volumes:
