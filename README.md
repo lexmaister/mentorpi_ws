@@ -133,6 +133,19 @@ export ROS_STATIC_PEERS="<ROBOT_IP>;<PC_IP>"   # robot IP;laptop IP (adjust to y
 
 ### 2. Making the settings persistent
 
+For better DDS discovery:
+
+  1. Run dev container and robot
+  2. Restart ROS stack on robot while dev container is running
+
+#### On the PC (dev container)
+
+`compose.yml` already has `ROS_AUTOMATIC_DISCOVERY_RANGE` and `ROS_STATIC_PEERS` in the `environment:` section. Adjust the IPs to match your network, then recreate the container:
+
+```bash
+docker compose down && docker compose up -d
+```
+
 #### On the robot
 
 The robot container sources `/home/pi/docker/tmp/.typerc` on every shell startup. Edit that file to bake in the discovery variables so they survive restarts.
@@ -163,14 +176,6 @@ The robot container sources `/home/pi/docker/tmp/.typerc` on every shell startup
    # Confirm STATIC_PEERS shows your robot and PC IPs
    ```
 
-#### On the PC (dev container)
-
-`compose.yml` already has `ROS_AUTOMATIC_DISCOVERY_RANGE` and `ROS_STATIC_PEERS` in the `environment:` section. Adjust the IPs to match your network, then recreate the container:
-
-```bash
-docker compose down && docker compose up -d
-```
-
 ### 3. Verify connectivity and validate
 
 **On both machines** — confirm the variables are active:
@@ -183,12 +188,14 @@ echo "$ROS_DOMAIN_ID $ROS_LOCALHOST_ONLY $ROS_AUTOMATIC_DISCOVERY_RANGE $ROS_STA
 
 ```bash
 ros2 topic list | wc -l
+# returns 49
 ```
 
 **On the PC** — the same command should return a matching count (topics are shared across machines) - try twice if the first returned count doesn't match the robot's number:
 
 ```bash
 ros2 topic list | wc -l
+# also should return 49
 ```
 
 If the counts match, both sides see the robot's topics. Confirm odometry is flowing from the robot to the PC:
