@@ -74,7 +74,7 @@ flowchart LR
 
   subgraph Sensors
     J["ascamera_node  HP60C\n/depth_cam/rgb/image_raw\n/depth_cam/depth/image_raw"]
-    K["lidar driver\n$LIDAR_TYPE: MS200 | LD19\n→ /scan  LaserScan\nframe_id: lidar_frame"]
+    K["lidar driver\n$LIDAR_TYPE: MS200 | LD19\n→ /scan_raw  LaserScan\nframe_id: lidar_frame"]
     L["robot_state_publisher\nURDF → /tf\nbase_footprint → lidar_frame\nbase_footprint → ascamera_link"]
   end
 
@@ -145,7 +145,7 @@ If a sensor node crashes, the robot continues driving but loses spatial awarenes
 | Node | Package | Publishes | TF frame |
 |---|---|---|---|
 | `ascamera_node` | `ascamera` | `/depth_cam/rgb/image_raw`, `/depth_cam/depth/image_raw`, `camera_info` | `ascamera_camera_link_0` |
-| lidar driver | `peripherals` (wraps MS200 or LD19) | `/scan` (`LaserScan`) | `lidar_frame` |
+| lidar driver | `peripherals` (wraps MS200 or LD19) | `/scan_raw` (`LaserScan`) | `lidar_frame` |
 | `robot_state_publisher` | `robot_state_publisher` | `/tf` static transforms | — |
 
 Static TF published by `robot_state_publisher`:
@@ -168,6 +168,8 @@ These components can be stopped independently without affecting chassis control.
 
 ## Confirmed minimum topic set after bringup
 
+The MentorPi M1 lidar drivers remap their scan output to `/scan_raw`. The default lidar launch currently leaves the laser-filter node disabled, so `/scan` is not published by the stock bringup. See the upstream [lidar launch](https://github.com/Hiwonder/MentorPi/blob/MentorPi-M1/peripherals/launch/lidar.launch.py) and its [MS200](https://github.com/Hiwonder/MentorPi/blob/MentorPi-M1/peripherals/launch/include/ms200_scan.launch.py) and [LD19](https://github.com/Hiwonder/MentorPi/blob/MentorPi-M1/peripherals/launch/include/ldlidar_LD19.launch.py) driver launches.
+
 ```bash
 # Odometry pipeline
 /ros_robot_controller/imu_raw   # raw IMU from STM32
@@ -184,7 +186,7 @@ ros_robot_controller/pwm_servo/set_state  # PWM servos to home position (init_po
 /ros_robot_controller/set_motor # MotorsState to STM32
 
 # Sensors
-/scan                           # LaserScan from lidar
+/scan_raw                       # LaserScan from lidar
 /depth_cam/rgb/image_raw        # colour frames from HP60C
 /depth_cam/depth/image_raw      # depth frames from HP60C
 
@@ -210,7 +212,7 @@ ros2 node list | grep -E "ros_robot_controller|odom_publisher|ekf_filter|joy_nod
 # Topic rates
 ros2 topic hz /odom_raw    # expect ~50 Hz
 ros2 topic hz /odom        # expect ~50 Hz
-ros2 topic hz /scan        # expect ~10–15 Hz
+ros2 topic hz /scan_raw    # expect ~10–15 Hz
 
 # IMU pipeline
 ros2 topic echo /ros_robot_controller/imu_raw --once

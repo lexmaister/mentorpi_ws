@@ -58,7 +58,7 @@ Key topics confirmed after a normal bringup:
 /odom          ← EKF output (used by SLAM + nav)
 /odom_raw      ← mecanum kinematics only
 /imu           ← complementary-filtered IMU
-/scan          ← LaserScan from lidar
+/scan_raw      ← LaserScan from lidar
 /depth_cam/rgb/image_raw  ← HP60C colour frames
 /tf            ← odom→base_footprint→lidar_frame→…
 ```
@@ -128,7 +128,7 @@ flowchart LR
 - `cmd_vel`: the standard ROS velocity-command topic shape, usually a `geometry_msgs/Twist`. It tells the robot how fast to move forward, sideways if supported, and how fast to rotate.
 - odometry: the robot's estimate of its own motion over short time spans, often derived from wheel encoders, IMU fusion, or both. Odometry is locally useful but drifts over time.
 - TF: the ROS transform system. TF answers questions like "where is the lidar relative to the robot base" or "where is the robot base relative to odom right now."
-- `LaserScan`: a common ROS message for 2D lidar ranges, often published on topics such as `/scan` or `/scan_raw`.
+- `LaserScan`: a common ROS message for 2D lidar ranges. MentorPi M1 publishes its lidar scans on `/scan_raw`.
 - SLAM: simultaneous localization and mapping. A SLAM package estimates the robot pose while building or updating a map.
 - Nav2: the ROS 2 navigation stack. It usually handles path planning, costmaps, recovery behavior, and path execution.
 - costmap: a grid representation of nearby obstacles and traversability used by planners and controllers.
@@ -276,7 +276,7 @@ What it provides:
 
 - **Joystick**: `joy_node` reads `/dev/input/js0` at 20 Hz and publishes `sensor_msgs/Joy`. `joystick_control` maps axes to linear (max 0.5 m/s) and angular (max 2.0 rad/s) velocity and publishes `geometry_msgs/Twist` on `/controller/cmd_vel`.
 - **IMU pipeline**: `imu_calib` applies calibration offsets from `calibration/config/imu_calib.yaml` to `/ros_robot_controller/imu_raw` → `/imu_corrected`. `imu_filter` (complementary filter, launched with a 5-second delay) fuses accelerometer and gyroscope and publishes `sensor_msgs/Imu` on `/imu`.
-- **Lidar**: wraps the vendor driver (MS200 or LD19) and publishes `sensor_msgs/LaserScan` on `/scan` with `frame_id: lidar_frame`. The lidar type is selected at runtime via the `$LIDAR_TYPE` environment variable.
+- **Lidar**: wraps the vendor driver (MS200 or LD19) and publishes `sensor_msgs/LaserScan` on `/scan_raw`. The lidar type is selected at runtime via the `$LIDAR_TYPE` environment variable. The default bringup does not publish `/scan`; its laser-filter node is disabled.
 - **Depth camera**: delegates to the `ascamera` launch or a USB-cam fallback depending on `$DEPTH_CAMERA_TYPE`.
 
 Confirmed topics:
@@ -287,17 +287,17 @@ Confirmed topics:
 | `joystick_control` | `/controller/cmd_vel` (`Twist`, max 0.5 m/s / 2.0 rad/s) |
 | `imu_calib` | `/imu_corrected` (`Imu`) |
 | `imu_filter` | `/imu` (`Imu`) |
-| lidar driver | `/scan` (`LaserScan`, `frame_id: lidar_frame`) |
+| lidar driver | `/scan_raw` (`LaserScan`, `frame_id: lidar_frame`) |
 
 How it connects to other packages:
 
 - `/controller/cmd_vel` feeds `odom_publisher` in `driver`, which converts it to per-wheel speeds.
 - `/imu` feeds `ekf_filter_node` in `driver`.
-- `/scan` is the primary input for SLAM and navigation costmaps.
+- `/scan_raw` is the lidar input for SLAM and navigation costmaps.
 
 How to verify:
 
-- `ros2 topic hz /scan` — should show ~10–15 Hz for the lidar.
+- `ros2 topic hz /scan_raw` — should show ~10–15 Hz for the lidar.
 - `ros2 topic echo /imu` — should show orientation changes when the robot rotates.
 - `ros2 topic echo /controller/cmd_vel` while pressing a joystick axis.
 
@@ -349,7 +349,7 @@ How it connects to other packages:
 How to verify:
 
 - `ros2 node list | grep -E "ros_robot_controller|odom_publisher|ekf_filter|ascamera|startup_check"` — all should appear.
-- `ros2 topic list` should include `/odom`, `/odom_raw`, `/imu`, `/scan`, `/depth_cam/rgb/image_raw`.
+- `ros2 topic list` should include `/odom`, `/odom_raw`, `/imu`, `/scan_raw`, `/depth_cam/rgb/image_raw`.
 - In RViz, TF should show: `odom → base_footprint → lidar_frame` and `base_footprint → ascamera_camera_link_0`.
 
 ### calibration
@@ -364,7 +364,7 @@ How to verify: drive a straight line or rotate in place and compare commanded ve
 
 Mapping and localization, with RViz helpers.
 
-Consumes `/scan`, `/odom`, and TF from the base stack; produces the `/map` topic and the `map → odom` transform. The `map → odom` link corrects odometry drift without forcing the `odom` frame to jump. SLAM must be healthy before navigation can plan globally.
+Consumes `/scan_raw`, `/odom`, and TF from the base stack; produces the `/map` topic and the `map → odom` transform. The `map → odom` link corrects odometry drift without forcing the `odom` frame to jump. SLAM must be healthy before navigation can plan globally.
 
 How to verify in RViz: set Fixed Frame to `odom`, add Map + TF + LaserScan. Drive the robot and confirm the map builds without visible drift.
 
@@ -372,9 +372,9 @@ How to verify in RViz: set Fixed Frame to `odom`, add Map + TF + LaserScan. Driv
 
 Goal-driven autonomous navigation (Nav2-style).
 
-Consumes `/map`, `/odom`, `/scan`, and TF; outputs `/cmd_vel` to the same base driver path used by teleop. Navigation sits above the driver and TF — if the base stack is unhealthy, planning fails even if the navigation nodes are running.
+Consumes `/map`, `/odom`, `/scan_raw`, and TF; outputs `/cmd_vel` to the same base driver path used by teleop. Navigation sits above the driver and TF — if the base stack is unhealthy, planning fails even if the navigation nodes are running.
 
-How to verify: send a goal in RViz and confirm a path appears; check `/cmd_vel` is active while the robot moves. If planning fails, verify `/map`, `/odom`, `/tf`, and `/scan` are all alive first.
+How to verify: send a goal in RViz and confirm a path appears; check `/cmd_vel` is active while the robot moves. If planning fails, verify `/map`, `/odom`, `/tf`, and `/scan_raw` are all alive first.
 
 ### multi
 
@@ -437,7 +437,7 @@ flowchart LR
   classDef nav fill:#4f46e5,stroke:#a5b4fc,color:#eef2ff,stroke-width:1.5px;
   classDef cmd fill:#7c3aed,stroke:#c4b5fd,color:#f5f3ff,stroke-width:1.5px;
   classDef tool fill:#1f2937,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
-  SCAN["/scan or /scan_raw\\nLaserScan"]
+  SCAN["/scan_raw\\nLaserScan"]
   ODOM["/odom\\nOdometry"]
   TF["/tf and /tf_static\\nTransforms"]
   MAP["/map\\nOccupancy grid or localization output"]
@@ -621,7 +621,7 @@ Expect: `ros_robot_controller`, `odom_publisher`, `ekf_filter_node`, `joy_node`,
 **Step 2 — Sensor sanity**
 
 ```bash
-ros2 topic hz /scan          # expect 10–15 Hz
+ros2 topic hz /scan_raw      # expect 10–15 Hz
 ros2 topic hz /odom_raw      # expect ~50 Hz
 ros2 topic hz /odom          # expect ~50 Hz
 ros2 topic echo /imu --once  # expect orientation data
@@ -630,7 +630,7 @@ ros2 topic echo /imu --once  # expect orientation data
 **Step 3 — TF and robot model (RViz)**
 
 - Fixed Frame: `odom`
-- Add: **TF**, **RobotModel** (`/robot_description`), **LaserScan** (`/scan`, size 0.03)
+- Add: **TF**, **RobotModel** (`/robot_description`), **LaserScan** (`/scan_raw`, size 0.03)
 - Confirm TF chain: `odom → base_footprint → lidar_frame → ascamera_camera_link_0`
 - Confirm scan points surround the robot model correctly
 
@@ -661,7 +661,7 @@ Open in a browser (no ROS required on the client).
 **Step 7 — If something is wrong: bottom-up debug order**
 
 1. Verify Core topics and TF (`/odom`, `/tf`, `ros_robot_controller` responsive)
-2. Verify Sensor topics (`/scan` rate, `/depth_cam` rate)
+2. Verify Sensor topics (`/scan_raw` rate, `/depth_cam` rate)
 3. Verify `slam` or localization output (`/map`, `map→odom` TF)
 4. Only then debug `navigation` or higher-level behaviors
 
