@@ -23,10 +23,8 @@ Start here and then open the guides below:
 3. [Bringup reference — boot chain, node table, topic set](docs/bringup-reference.md)
 4. [Using Ascamera package (ascamera)](docs/ascamera-guide.md)
 5. [Run without full robot hardware](docs/working-without-robot.md)
-6. [Learning use-case playbooks](docs/learning-use-cases.md)
-7. [Command cheat sheet](docs/command-cheat-sheet.md)
-8. [Learning plan (8 weeks + extensions)](docs/learning-plan.md)
-9. [Troubleshooting](docs/troubleshooting.md)
+6. [Command cheat sheet](docs/command-cheat-sheet.md)
+7. [Troubleshooting](docs/troubleshooting.md)
 
 Remote debugging from a separate PC is covered directly in this README, see [Debugging from a separate PC](#debugging-from-a-separate-pc) below.
 
@@ -104,7 +102,6 @@ If you want a fast start without robot hardware:
 
 1. Follow [Docker setup and daily workflow](docs/getting-started-docker.md)
 2. Run the robot model visualization from [Run without full robot hardware](docs/working-without-robot.md)
-3. Run webcam-based perception examples from [Learning use-case playbooks](docs/learning-use-cases.md)
 
 ## Scope and assumptions
 
